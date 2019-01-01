@@ -8,4 +8,4 @@ There are helper scripts if you don't want to manually compile the required libs
 `./build` will build a static binary to `$GOPATH/bin` that runs your PC.
 
 ### JNI bindings for Android
-`./build-android` will build an `aar` package to `$GOPATH/bin` that you can import in Android studio and then the exported functions will be available from your java code: `StartServer()` and `StopServer()`
+`./build-android` will build `streamer.aar` package to `$GOPATH/bin` that you can import in Android studio and then the exported functions will be available from your java code: `StartServer()` and `StopServer()`
