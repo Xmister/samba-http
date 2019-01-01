@@ -1,0 +1,51 @@
+FROM golang
+ENV ANDROID_HOME /opt/android-sdk-linux
+ENV SDK_TOOLS_VERSION 25.2.5
+ENV API_LEVELS android-23
+ENV BUILD_TOOLS_VERSIONS build-tools-25.0.2,build-tools-23.0.1
+ENV ANDROID_EXTRAS extra-android-m2repository,extra-android-support,extra-google-google_play_services,extra-google-m2repository
+ENV PATH ${PATH}:${ANDROID_HOME}/tools:${ANDROID_HOME}/tools/bin:${ANDROID_HOME}/platform-tools
+ENV NDK=/opt/android-sdk-linux/ndk-bundle
+ENV DEBIAN_NONINTERACTIVE 1
+
+RUN apt update && \
+    apt-get install -y build-essential wget git openjdk-8-jdk-headless autoconf automake libtool texinfo unzip python && \
+    apt-get autoclean -y && apt-get clean -y && rm -rf /var/lib/apt/lists
+RUN mkdir -p /opt/android-sdk-linux && cd /opt \
+    && wget -q http://dl.google.com/android/repository/tools_r${SDK_TOOLS_VERSION}-linux.zip -O android-sdk-tools.zip \
+    && unzip -q android-sdk-tools.zip -d ${ANDROID_HOME} \
+    && rm -f android-sdk-tools.zip \
+    && echo 'y' | android update sdk --no-ui -a --filter \
+    tools,platform-tools,${ANDROID_EXTRAS},${API_LEVELS},${BUILD_TOOLS_VERSIONS} --no-https \
+    && yes | sdkmanager ndk-bundle
+
+WORKDIR /tmp
+RUN wget http://ftp.gnu.org/gnu/libtasn1/libtasn1-4.13.tar.gz && tar -xzf libtasn1-4.13.tar.gz
+RUN wget https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.15.tar.gz && tar -xzf libiconv-1.15.tar.gz
+RUN git clone https://github.com/videolabs/libdsm.git
+RUN git clone https://github.com/sahlberg/libsmb2.git
+RUN echo -n '#!/bin/bash\nexec `find /tmp/chain/bin -name *-gcc` "$@"' > /tmp/gcc && chmod a+x /tmp/gcc
+WORKDIR /tmp/libtasn1-4.13
+RUN ./configure && make && make install && make clean
+RUN go get golang.org/x/mobile/cmd/gomobile
+
+ARG ARCH
+ARG GCCARCH
+RUN $NDK/build/tools/make_standalone_toolchain.py \
+    --arch $ARCH --install-dir /tmp/chain
+ENV CC=/tmp/gcc
+ENV LDFLAGS="-s -w"
+ENV CFLAGS="-O2"
+RUN ./configure --prefix=/tmp/chain --with-sysroot=/tmp/chain --host=$GCCARCH && make && make install
+WORKDIR /tmp/libiconv-1.15
+RUN ./configure --prefix=/tmp/chain --with-sysroot=/tmp/chain --host=$GCCARCH && make && make install
+WORKDIR /tmp/libdsm
+ENV CFLAGS="-O2 -I/tmp/chain/include"
+ENV TASN1_CFLAGS="-Ilibtasn1/include"
+ENV TASN1_LIBS="-L/tmp/chain/lib -ltasn1 -llog -liconv"
+RUN ./bootstrap
+RUN ./configure --prefix=/tmp/chain --with-sysroot=/tmp/chain --host=$GCCARCH && make && make install
+WORKDIR /tmp/libsmb2
+ENV USECLANG=1
+ENV CFLAGS="-O2 -fembed-bitcode -Wno-everything -DHAVE_SOCKADDR_LEN=1 -DHAVE_SOCKADDR_STORAGE=1"
+RUN ./bootstrap && ./configure --prefix=/tmp/chain --with-sysroot=/tmp/chain --host=$GCCARCH --without-libkrb5 && make && make install

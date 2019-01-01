@@ -1,0 +1,54 @@
+#!/bin/bash
+mkdir -p android-build > /dev/null
+
+gobuild()
+{
+    pushd android-build
+        docker run --rm -it \
+         -e CGO_ENABLED=1 \
+         -e CGO_LDFLAGS="-L/tmp/chain/lib -lsmb2 -ldsm -ltasn1 -llog -liconv" \
+         -e CGO_CFLAGS="-I/tmp/chain/include -I/tmp/chain/include/smb2 -I/tmp/chain/include/bdsm" \
+         -v $PWD/..:/go/src/github.com/Xmister/samba-http \
+         -w /go/src/github.com/Xmister/samba-http/android-build samba-http-builder-android-$1 sh -c "\
+            go get -d .. && \
+            gomobile init && \
+            gomobile bind -v -ldflags '-w -s' -o streamer.aar -target=android/$2 github.com/Xmister/samba-http/streamer"
+        unzip -o streamer.aar
+        rm -f streamer.aar streamer-sources.jar
+    popd
+}
+
+build()
+{
+    docker build --build-arg ARCH=$1 --build-arg GCCARCH=$2 -f Dockerfile-android -t samba-http-builder-android-$1 .
+    gobuild $1 $3
+}
+
+#ARM
+export ARCH=arm
+export GCCARCH=arm
+export GOARCH=arm
+build $ARCH $GCCARCH $GOARCH
+
+#ARM64
+export ARCH=arm64
+export GCCARCH=aarch64
+export GOARCH=arm64
+build $ARCH $GCCARCH $GOARCH
+
+#X86
+export ARCH=x86
+export GCCARCH=i686
+export GOARCH=386
+build $ARCH $GCCARCH $GOARCH
+
+#X86_64
+export ARCH=x86_64
+export GCCARCH=x86_64
+export GOARCH=amd64
+build $ARCH $GCCARCH $GOARCH
+
+pushd android-build
+zip -r $GOPATH/bin/streamer.aar *
+popd
+rm -rf android-build

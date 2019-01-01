@@ -1,0 +1,10 @@
+#!/bin/bash
+docker build -t samba-http-builder .
+docker run --rm -it -e CGO_ENABLED=1 \
+     -e CGO_LDFLAGS="-L/usr/local/lib -lsmb2 -liconv -ldsm -ltasn1" \
+     -e CGO_CFLAGS="-I/usr/local/include -I/usr/local/include/bdsm -I/usr/local/include/smb2" \
+     -v $PWD:/go/src/github.com/Xmister/samba-http \
+     -v $GOPATH/bin:/go/host_bin \
+     -w /go/src/github.com/Xmister/samba-http samba-http-builder sh -c "\
+        go get -d && \
+        go build -ldflags '-w -s -extldflags=-static' -o /go/host_bin/samba-http ."
